@@ -30,7 +30,6 @@ export function AddSongForm({ onSongAdded }: AddSongFormProps) {
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [countryTag, setCountryTag] = useState("");
   const [title, setTitle] = useState("");
-  const [addedBy, setAddedBy] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -47,7 +46,6 @@ export function AddSongForm({ onSongAdded }: AddSongFormProps) {
           youtube_url: youtubeUrl,
           country_tag: countryTag,
           title: title || undefined,
-          added_by: addedBy || undefined,
         }),
       });
 
@@ -118,16 +116,6 @@ export function AddSongForm({ onSongAdded }: AddSongFormProps) {
               placeholder="Song name"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="added-by">Your Nickname (optional)</Label>
-            <Input
-              id="added-by"
-              placeholder="Your name"
-              value={addedBy}
-              onChange={(e) => setAddedBy(e.target.value)}
             />
           </div>
 

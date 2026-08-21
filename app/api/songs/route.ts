@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserSongs, addUserSong } from "@/lib/db";
 import { extractYouTubeId } from "@/lib/youtube";
+import { getCurrentUser } from "@/lib/auth";
 
 export async function GET() {
   try {
@@ -14,8 +15,13 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await request.json();
-    const { youtube_url, country_tag, title, added_by } = body;
+    const { youtube_url, country_tag, title } = body;
 
     if (!youtube_url || typeof youtube_url !== "string") {
       return NextResponse.json({ error: "YouTube URL is required" }, { status: 400 });
@@ -35,7 +41,7 @@ export async function POST(request: NextRequest) {
       youtube_id: youtubeId,
       country_tag,
       title: title || null,
-      added_by: added_by || null,
+      added_by: user.name,
     });
 
     return NextResponse.json({ song }, { status: 201 });
