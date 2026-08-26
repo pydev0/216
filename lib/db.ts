@@ -54,6 +54,8 @@ async function init(): Promise<void> {
         youtube_id TEXT NOT NULL,
         country_tag TEXT NOT NULL,
         title TEXT,
+        artist TEXT,
+        album_art TEXT,
         added_by TEXT,
         created_at INTEGER NOT NULL DEFAULT (unixepoch())
       )`,
@@ -83,6 +85,16 @@ async function init(): Promise<void> {
   const userCols = await db.execute("PRAGMA table_info(users)");
   if (!userCols.rows.some((r) => (r as unknown as { name: string }).name === "avatar")) {
     await db.execute("ALTER TABLE users ADD COLUMN avatar TEXT");
+  }
+
+  // Migration: add artist/album_art columns to user_songs if missing
+  const songCols = await db.execute("PRAGMA table_info(user_songs)");
+  const songColNames = songCols.rows.map((r) => (r as unknown as { name: string }).name);
+  if (!songColNames.includes("artist")) {
+    await db.execute("ALTER TABLE user_songs ADD COLUMN artist TEXT");
+  }
+  if (!songColNames.includes("album_art")) {
+    await db.execute("ALTER TABLE user_songs ADD COLUMN album_art TEXT");
   }
 
   // Seed users if table is empty
@@ -124,6 +136,8 @@ export interface UserSong {
   youtube_id: string;
   country_tag: string;
   title: string | null;
+  artist: string | null;
+  album_art: string | null;
   added_by: string | null;
   created_at: number;
 }
@@ -168,8 +182,8 @@ export async function getUserSongs(): Promise<UserSong[]> {
 export async function addUserSong(song: Omit<UserSong, "id" | "created_at">): Promise<UserSong> {
   const db = await ready();
   const result = await db.execute({
-    sql: "INSERT INTO user_songs (youtube_url, youtube_id, country_tag, title, added_by) VALUES (?, ?, ?, ?, ?)",
-    args: [song.youtube_url, song.youtube_id, song.country_tag, song.title, song.added_by],
+    sql: "INSERT INTO user_songs (youtube_url, youtube_id, country_tag, title, artist, album_art, added_by) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    args: [song.youtube_url, song.youtube_id, song.country_tag, song.title, song.artist, song.album_art, song.added_by],
   });
   const res = await db.execute({
     sql: "SELECT * FROM user_songs WHERE id = ?",
