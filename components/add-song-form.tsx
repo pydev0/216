@@ -70,7 +70,12 @@ export function AddSongForm({ onSongAdded }: AddSongFormProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
-        render={<Button variant="outline" size="sm" />}
+        render={
+          <Button
+            size="sm"
+            className="bg-gradient-to-r from-purple-500 to-blue-500 text-white border-0 hover:from-purple-400 hover:to-blue-400 hover:text-white shadow-[0_0_12px_rgba(139,92,246,0.35)]"
+          />
+        }
       >
         + Add a Song
       </DialogTrigger>
