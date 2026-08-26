@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Name and password are required" }, { status: 400 });
     }
 
-    const user = getUserByName(name);
+    const user = await getUserByName(name);
     if (!user || !user.password_hash) {
       return NextResponse.json({ error: "Invalid name or password" }, { status: 401 });
     }
