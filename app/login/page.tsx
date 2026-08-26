@@ -28,6 +28,7 @@ export default function LoginPage() {
   const [unclaimedUsers, setUnclaimedUsers] = useState<UnclaimedUser[]>([]);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
 
   useEffect(() => {
     if (mode === "claim") {
@@ -47,7 +48,7 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, password }),
+        body: JSON.stringify({ name, password, remember_me: rememberMe }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -131,6 +132,19 @@ export default function LoginPage() {
                 required
                 autoComplete="current-password"
               />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                id="remember-me"
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="h-4 w-4 rounded border-input accent-purple-500"
+              />
+              <Label htmlFor="remember-me" className="text-sm font-normal text-muted-foreground cursor-pointer">
+                Remember me
+              </Label>
             </div>
 
             {error && <p className="text-sm text-red-500">{error}</p>}
