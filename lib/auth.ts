@@ -44,7 +44,7 @@ export async function getCurrentUser(): Promise<{
   };
 }
 
-export async function createUserSession(userId: number): Promise<void> {
+export async function createUserSession(userId: number, rememberMe: boolean = true): Promise<void> {
   const token = generateToken();
   const expiresAt = Math.floor(Date.now() / 1000) + SESSION_MAX_AGE_SECONDS;
 
@@ -55,8 +55,8 @@ export async function createUserSession(userId: number): Promise<void> {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    maxAge: SESSION_MAX_AGE_SECONDS,
     path: "/",
+    ...(rememberMe ? { maxAge: SESSION_MAX_AGE_SECONDS } : {}),
   });
 }
 
