@@ -16,6 +16,30 @@ export async function searchYouTubeVideo(
   }
 }
 
+export interface YouTubeOembed {
+  title: string;
+  authorName: string;
+  thumbnail: string;
+}
+
+export async function getYouTubeOembed(youtubeId: string): Promise<YouTubeOembed | null> {
+  try {
+    const url = `https://www.youtube.com/oembed?url=${encodeURIComponent(
+      `https://www.youtube.com/watch?v=${youtubeId}`
+    )}&format=json`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return {
+      title: data.title ?? "",
+      authorName: data.author_name ?? "",
+      thumbnail: data.thumbnail_url ?? `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function extractYouTubeId(url: string): string | null {
   const patterns = [
     /(?:youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/,
