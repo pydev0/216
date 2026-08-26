@@ -35,6 +35,8 @@ interface UserSong {
   youtube_id: string;
   country_tag: string;
   title: string | null;
+  artist: string | null;
+  album_art: string | null;
   added_by: string | null;
   created_at: number;
 }
@@ -512,8 +514,8 @@ export default function Home() {
                   <TrackCard
                     key={`song-${song.id}`}
                     trackName={song.title || "Untitled"}
-                    artist=""
-                    albumArt={null}
+                    artist={song.artist || ""}
+                    albumArt={song.album_art}
                     youtubeId={song.youtube_id}
                     country={song.country_tag}
                     addedBy={song.added_by}
