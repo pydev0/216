@@ -7,7 +7,7 @@ export async function GET() {
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  const songCount = getUserSongsByName(user.name).length;
-  const avatar = getUserAvatar(user.id);
+  const songCount = (await getUserSongsByName(user.name)).length;
+  const avatar = await getUserAvatar(user.id);
   return NextResponse.json({ user: { ...user, song_count: songCount, avatar } });
 }
