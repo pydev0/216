@@ -179,6 +179,24 @@ export async function getUserSongs(): Promise<UserSong[]> {
   return res.rows as unknown as UserSong[];
 }
 
+export async function getUserSongById(id: number): Promise<UserSong | undefined> {
+  const db = await ready();
+  const res = await db.execute({
+    sql: "SELECT * FROM user_songs WHERE id = ?",
+    args: [id],
+  });
+  return res.rows[0] as unknown as UserSong | undefined;
+}
+
+export async function deleteUserSong(id: number): Promise<boolean> {
+  const db = await ready();
+  const res = await db.execute({
+    sql: "DELETE FROM user_songs WHERE id = ?",
+    args: [id],
+  });
+  return res.rowsAffected > 0;
+}
+
 export async function addUserSong(song: Omit<UserSong, "id" | "created_at">): Promise<UserSong> {
   const db = await ready();
   const result = await db.execute({
