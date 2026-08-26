@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
   const buffer = Buffer.from(await file.arrayBuffer());
   const base64 = `data:${file.type};base64,${buffer.toString("base64")}`;
 
-  updateUserAvatar(user.id, base64);
+  await updateUserAvatar(user.id, base64);
 
   return NextResponse.json({ avatar: base64 });
 }
