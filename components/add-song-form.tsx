@@ -19,7 +19,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-const COUNTRIES = ["Romania", "Ukraine", "India", "United Kingdom", "Sri Lanka"];
+const COUNTRIES = ["Romania", "Ukraine", "India", "United Kingdom", "Sri Lanka", "United States"];
 
 interface AddSongFormProps {
   onSongAdded: () => void;
