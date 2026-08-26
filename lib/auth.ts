@@ -34,7 +34,7 @@ export async function getCurrentUser(): Promise<{
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (!token) return null;
 
-  const session = getSessionWithUser(token);
+  const session = await getSessionWithUser(token);
   if (!session) return null;
 
   return {
@@ -48,7 +48,7 @@ export async function createUserSession(userId: number): Promise<void> {
   const token = generateToken();
   const expiresAt = Math.floor(Date.now() / 1000) + SESSION_MAX_AGE_SECONDS;
 
-  dbCreateSession(token, userId, expiresAt);
+  await dbCreateSession(token, userId, expiresAt);
 
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE, token, {
@@ -64,7 +64,7 @@ export async function destroySession(): Promise<void> {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (token) {
-    dbDeleteSession(token);
+    await dbDeleteSession(token);
   }
   cookieStore.set(SESSION_COOKIE, "", {
     httpOnly: true,
