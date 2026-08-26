@@ -1,10 +1,9 @@
-import yts from "yt-search";
-
 export async function searchYouTubeVideo(
   trackName: string,
   artistName: string
 ): Promise<string | null> {
   try {
+    const { default: yts } = await import("yt-search");
     const query = `${trackName} ${artistName} official audio`;
     const result = await yts(query);
     if (result.videos.length > 0) {
