@@ -51,10 +51,14 @@ function AvatarDropdown({
   user,
   onLogout,
   onAvatarUpdate,
+  mySongs,
+  onDeleteSong,
 }: {
   user: AuthUser;
   onLogout: () => void;
   onAvatarUpdate: (avatar: string) => void;
+  mySongs: UserSong[];
+  onDeleteSong: (id: number) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
@@ -247,9 +251,32 @@ function AvatarDropdown({
               </span>
             </div>
 
-            {/* Song count */}
-            <div className="text-sm text-muted-foreground">
-              {user.song_count} song{user.song_count !== 1 ? "s" : ""} added
+            {/* Your songs */}
+            <div className="w-full">
+              <div className="text-sm text-muted-foreground text-center mb-2">
+                {mySongs.length} song{mySongs.length !== 1 ? "s" : ""} added
+              </div>
+              {mySongs.length > 0 && (
+                <div className="max-h-40 overflow-y-auto space-y-1 rounded-lg bg-muted/30 p-1.5">
+                  {mySongs.map((song) => (
+                    <div
+                      key={song.id}
+                      className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 transition-colors"
+                    >
+                      <span className="text-xs truncate">{song.title || "Untitled"}</span>
+                      <button
+                        onClick={() => onDeleteSong(song.id)}
+                        aria-label="Delete song"
+                        className="shrink-0 p-1 rounded-full text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -433,6 +460,10 @@ export default function Home() {
       ? userSongs
       : userSongs.filter((s) => s.country_tag === selectedCountry);
 
+  const mySongs = user
+    ? userSongs.filter((s) => s.added_by?.toLowerCase() === user.name.toLowerCase())
+    : [];
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <header className="relative">
@@ -450,6 +481,8 @@ export default function Home() {
             user={user}
             onLogout={handleLogout}
             onAvatarUpdate={handleAvatarUpdate}
+            mySongs={mySongs}
+            onDeleteSong={handleDeleteSong}
           />
         )}
       </header>
