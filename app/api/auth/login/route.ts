@@ -4,7 +4,7 @@ import { verifyPassword, createUserSession } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
   try {
-    const { name, password } = await request.json();
+    const { name, password, remember_me } = await request.json();
 
     if (!name || !password) {
       return NextResponse.json({ error: "Name and password are required" }, { status: 400 });
@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid name or password" }, { status: 401 });
     }
 
-    await createUserSession(user.id);
+    await createUserSession(user.id, remember_me !== false);
 
     return NextResponse.json({ user: { id: user.id, name: user.name, role: user.role } });
   } catch (error) {
