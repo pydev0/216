@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserSongs, addUserSong } from "@/lib/db";
-import { extractYouTubeId } from "@/lib/youtube";
+import { extractYouTubeId, getYouTubeOembed } from "@/lib/youtube";
 import { getCurrentUser } from "@/lib/auth";
 
 export async function GET() {
@@ -36,11 +36,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid YouTube URL" }, { status: 400 });
     }
 
+    let finalTitle: string | null = title || null;
+    let artist: string | null = null;
+    let albumArt: string | null = null;
+
+    const oembed = await getYouTubeOembed(youtubeId);
+    if (oembed) {
+      if (!finalTitle) finalTitle = oembed.title || null;
+      artist = oembed.authorName || null;
+      albumArt = oembed.thumbnail || null;
+    }
+
     const song = await addUserSong({
       youtube_url,
       youtube_id: youtubeId,
       country_tag,
-      title: title || null,
+      title: finalTitle,
+      artist,
+      album_art: albumArt,
       added_by: user.name,
     });
 
@@ -50,3 +63,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Failed to add song" }, { status: 500 });
   }
 }
+
