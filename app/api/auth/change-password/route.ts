@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const dbUser = getUserById(user.id);
+  const dbUser = await getUserById(user.id);
   if (!dbUser || !dbUser.password_hash) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
   }
 
   const newHash = await hashPassword(new_password);
-  updateUserPassword(user.id, newHash);
+  await updateUserPassword(user.id, newHash);
 
   return NextResponse.json({ success: true });
 }
