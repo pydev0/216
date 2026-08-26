@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Password must be at least 4 characters" }, { status: 400 });
     }
 
-    const user = getUserById(user_id);
+    const user = await getUserById(user_id);
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     }
 
     const hash = await hashPassword(password);
-    const claimed = claimUser(user_id, hash);
+    const claimed = await claimUser(user_id, hash);
     if (!claimed) {
       return NextResponse.json({ error: "Failed to claim account" }, { status: 409 });
     }
