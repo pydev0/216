@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 
 export async function GET() {
   try {
-    const songs = getUserSongs();
+    const songs = await getUserSongs();
     return NextResponse.json({ songs });
   } catch (error) {
     console.error("Songs GET error:", error);
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid YouTube URL" }, { status: 400 });
     }
 
-    const song = addUserSong({
+    const song = await addUserSong({
       youtube_url,
       youtube_id: youtubeId,
       country_tag,
