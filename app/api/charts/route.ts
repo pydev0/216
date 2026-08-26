@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     const periodParam = request.nextUrl.searchParams.get("period") || "week";
     const period: Period = VALID_PERIODS.has(periodParam) ? (periodParam as Period) : "week";
 
-    const oldest = getChartsAge(period);
+    const oldest = await getChartsAge(period);
     const isStale = !oldest || Date.now() / 1000 - oldest > SEVEN_DAYS_MS / 1000;
 
     if (isStale) {
@@ -39,11 +39,11 @@ export async function GET(request: NextRequest) {
       }
 
       if (allTracks.length > 0) {
-        saveCharts(allTracks, period);
+        await saveCharts(allTracks, period);
       }
     }
 
-    const charts = getCharts(period);
+    const charts = await getCharts(period);
     return NextResponse.json({ tracks: charts, countries: COUNTRIES });
   } catch (error) {
     console.error("Charts API error:", error);
