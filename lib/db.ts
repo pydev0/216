@@ -1,9 +1,4 @@
-import Database from "better-sqlite3";
-import path from "path";
-
-const DB_PATH = path.join(process.cwd(), "line-radio.db");
-
-let db: Database.Database | null = null;
+import { createClient, type Client } from "@libsql/client";
 
 const SEED_USERS: { name: string; role: "admin" | "user" }[] = [
   { name: "Kane", role: "admin" },
@@ -23,12 +18,27 @@ const SEED_USERS: { name: string; role: "admin" | "user" }[] = [
   { name: "Anjelika", role: "user" },
 ];
 
-function getDb(): Database.Database {
-  if (!db) {
-    db = new Database(DB_PATH);
-    db.pragma("journal_mode = WAL");
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS chart_tracks (
+let client: Client | null = null;
+let initPromise: Promise<void> | null = null;
+
+function getClient(): Client {
+  if (!client) {
+    const url = process.env.TURSO_DATABASE_URL;
+    const authToken = process.env.TURSO_AUTH_TOKEN;
+    if (!url) {
+      throw new Error("TURSO_DATABASE_URL is not set");
+    }
+    client = createClient({ url, authToken });
+  }
+  return client;
+}
+
+async function init(): Promise<void> {
+  const db = getClient();
+
+  await db.batch(
+    [
+      `CREATE TABLE IF NOT EXISTS chart_tracks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         country TEXT NOT NULL,
         track_name TEXT NOT NULL,
@@ -37,9 +47,8 @@ function getDb(): Database.Database {
         album_art TEXT,
         period TEXT NOT NULL DEFAULT 'week',
         fetched_at INTEGER NOT NULL
-      );
-
-      CREATE TABLE IF NOT EXISTS user_songs (
+      )`,
+      `CREATE TABLE IF NOT EXISTS user_songs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         youtube_url TEXT NOT NULL,
         youtube_id TEXT NOT NULL,
@@ -47,45 +56,55 @@ function getDb(): Database.Database {
         title TEXT,
         added_by TEXT,
         created_at INTEGER NOT NULL DEFAULT (unixepoch())
-      );
-
-      CREATE TABLE IF NOT EXISTS users (
+      )`,
+      `CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL UNIQUE,
         password_hash TEXT,
         role TEXT NOT NULL DEFAULT 'user'
-      );
-
-      CREATE TABLE IF NOT EXISTS sessions (
+      )`,
+      `CREATE TABLE IF NOT EXISTS sessions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         token TEXT NOT NULL UNIQUE,
         user_id INTEGER NOT NULL REFERENCES users(id),
         expires_at INTEGER NOT NULL
-      );
-    `);
+      )`,
+    ],
+    "write"
+  );
 
-    // Migration: add period column if missing
-    const columns = db.prepare("PRAGMA table_info(chart_tracks)").all() as { name: string }[];
-    if (!columns.some((c) => c.name === "period")) {
-      db.exec("ALTER TABLE chart_tracks ADD COLUMN period TEXT NOT NULL DEFAULT 'week'");
-    }
-
-    // Migration: add avatar column to users if missing
-    const userColumns = db.prepare("PRAGMA table_info(users)").all() as { name: string }[];
-    if (!userColumns.some((c) => c.name === "avatar")) {
-      db.exec("ALTER TABLE users ADD COLUMN avatar TEXT");
-    }
-
-    // Seed users if table is empty
-    const userCount = db.prepare("SELECT COUNT(*) as count FROM users").get() as { count: number };
-    if (userCount.count === 0) {
-      const insert = db.prepare("INSERT INTO users (name, role) VALUES (?, ?)");
-      for (const u of SEED_USERS) {
-        insert.run(u.name, u.role);
-      }
-    }
+  // Migration: add period column if missing
+  const chartCols = await db.execute("PRAGMA table_info(chart_tracks)");
+  if (!chartCols.rows.some((r) => (r as unknown as { name: string }).name === "period")) {
+    await db.execute("ALTER TABLE chart_tracks ADD COLUMN period TEXT NOT NULL DEFAULT 'week'");
   }
-  return db;
+
+  // Migration: add avatar column to users if missing
+  const userCols = await db.execute("PRAGMA table_info(users)");
+  if (!userCols.rows.some((r) => (r as unknown as { name: string }).name === "avatar")) {
+    await db.execute("ALTER TABLE users ADD COLUMN avatar TEXT");
+  }
+
+  // Seed users if table is empty
+  const countRes = await db.execute("SELECT COUNT(*) as count FROM users");
+  const count = Number(countRes.rows[0]?.count ?? 0);
+  if (count === 0) {
+    await db.batch(
+      SEED_USERS.map((u) => ({
+        sql: "INSERT INTO users (name, role) VALUES (?, ?)",
+        args: [u.name, u.role],
+      })),
+      "write"
+    );
+  }
+}
+
+async function ready(): Promise<Client> {
+  if (!initPromise) {
+    initPromise = init();
+  }
+  await initPromise;
+  return getClient();
 }
 
 export interface ChartTrack {
@@ -109,43 +128,54 @@ export interface UserSong {
   created_at: number;
 }
 
-export function getCharts(period: string = "week"): ChartTrack[] {
-  return getDb().prepare("SELECT * FROM chart_tracks WHERE period = ? ORDER BY country, id").all(period) as ChartTrack[];
-}
-
-export function getChartsAge(period: string = "week"): number | null {
-  const row = getDb().prepare("SELECT MIN(fetched_at) as oldest FROM chart_tracks WHERE period = ?").get(period) as { oldest: number | null } | undefined;
-  return row?.oldest ?? null;
-}
-
-export function saveCharts(tracks: Omit<ChartTrack, "id">[], period: string = "week") {
-  const d = getDb();
-  const deleteStmt = d.prepare("DELETE FROM chart_tracks WHERE period = ?");
-  const insertStmt = d.prepare(
-    "INSERT INTO chart_tracks (country, track_name, artist, youtube_id, album_art, period, fetched_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-  );
-
-  const transaction = d.transaction((tracks: Omit<ChartTrack, "id">[]) => {
-    deleteStmt.run(period);
-    for (const t of tracks) {
-      insertStmt.run(t.country, t.track_name, t.artist, t.youtube_id, t.album_art, t.period, t.fetched_at);
-    }
+export async function getCharts(period: string = "week"): Promise<ChartTrack[]> {
+  const db = await ready();
+  const res = await db.execute({
+    sql: "SELECT * FROM chart_tracks WHERE period = ? ORDER BY country, id",
+    args: [period],
   });
-
-  transaction(tracks);
+  return res.rows as unknown as ChartTrack[];
 }
 
-export function getUserSongs(): UserSong[] {
-  return getDb().prepare("SELECT * FROM user_songs ORDER BY created_at DESC").all() as UserSong[];
+export async function getChartsAge(period: string = "week"): Promise<number | null> {
+  const db = await ready();
+  const res = await db.execute({
+    sql: "SELECT MIN(fetched_at) as oldest FROM chart_tracks WHERE period = ?",
+    args: [period],
+  });
+  const oldest = res.rows[0]?.oldest;
+  return oldest === null || oldest === undefined ? null : Number(oldest);
 }
 
-export function addUserSong(song: Omit<UserSong, "id" | "created_at">): UserSong {
-  const d = getDb();
-  const result = d.prepare(
-    "INSERT INTO user_songs (youtube_url, youtube_id, country_tag, title, added_by) VALUES (?, ?, ?, ?, ?)"
-  ).run(song.youtube_url, song.youtube_id, song.country_tag, song.title, song.added_by);
+export async function saveCharts(tracks: Omit<ChartTrack, "id">[], period: string = "week"): Promise<void> {
+  const db = await ready();
+  const statements = [
+    { sql: "DELETE FROM chart_tracks WHERE period = ?", args: [period] },
+    ...tracks.map((t) => ({
+      sql: "INSERT INTO chart_tracks (country, track_name, artist, youtube_id, album_art, period, fetched_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      args: [t.country, t.track_name, t.artist, t.youtube_id, t.album_art, t.period, t.fetched_at],
+    })),
+  ];
+  await db.batch(statements, "write");
+}
 
-  return d.prepare("SELECT * FROM user_songs WHERE id = ?").get(result.lastInsertRowid) as UserSong;
+export async function getUserSongs(): Promise<UserSong[]> {
+  const db = await ready();
+  const res = await db.execute("SELECT * FROM user_songs ORDER BY created_at DESC");
+  return res.rows as unknown as UserSong[];
+}
+
+export async function addUserSong(song: Omit<UserSong, "id" | "created_at">): Promise<UserSong> {
+  const db = await ready();
+  const result = await db.execute({
+    sql: "INSERT INTO user_songs (youtube_url, youtube_id, country_tag, title, added_by) VALUES (?, ?, ?, ?, ?)",
+    args: [song.youtube_url, song.youtube_id, song.country_tag, song.title, song.added_by],
+  });
+  const res = await db.execute({
+    sql: "SELECT * FROM user_songs WHERE id = ?",
+    args: [Number(result.lastInsertRowid)],
+  });
+  return res.rows[0] as unknown as UserSong;
 }
 
 // --- Auth helpers ---
@@ -164,74 +194,100 @@ export interface Session {
   expires_at: number;
 }
 
-export function getUnclaimedUsers(): Pick<User, "id" | "name">[] {
-  return getDb()
-    .prepare("SELECT id, name FROM users WHERE password_hash IS NULL ORDER BY name")
-    .all() as Pick<User, "id" | "name">[];
+export async function getUnclaimedUsers(): Promise<Pick<User, "id" | "name">[]> {
+  const db = await ready();
+  const res = await db.execute(
+    "SELECT id, name FROM users WHERE password_hash IS NULL ORDER BY name"
+  );
+  return res.rows as unknown as Pick<User, "id" | "name">[];
 }
 
-export function getUserByName(name: string): User | undefined {
-  return getDb()
-    .prepare("SELECT * FROM users WHERE name = ? COLLATE NOCASE")
-    .get(name) as User | undefined;
+export async function getUserByName(name: string): Promise<User | undefined> {
+  const db = await ready();
+  const res = await db.execute({
+    sql: "SELECT * FROM users WHERE name = ? COLLATE NOCASE",
+    args: [name],
+  });
+  return res.rows[0] as unknown as User | undefined;
 }
 
-export function getUserById(id: number): User | undefined {
-  return getDb()
-    .prepare("SELECT * FROM users WHERE id = ?")
-    .get(id) as User | undefined;
+export async function getUserById(id: number): Promise<User | undefined> {
+  const db = await ready();
+  const res = await db.execute({
+    sql: "SELECT * FROM users WHERE id = ?",
+    args: [id],
+  });
+  return res.rows[0] as unknown as User | undefined;
 }
 
-export function claimUser(id: number, passwordHash: string): boolean {
-  const result = getDb()
-    .prepare("UPDATE users SET password_hash = ? WHERE id = ? AND password_hash IS NULL")
-    .run(passwordHash, id);
-  return result.changes > 0;
+export async function claimUser(id: number, passwordHash: string): Promise<boolean> {
+  const db = await ready();
+  const res = await db.execute({
+    sql: "UPDATE users SET password_hash = ? WHERE id = ? AND password_hash IS NULL",
+    args: [passwordHash, id],
+  });
+  return res.rowsAffected > 0;
 }
 
-export function createSession(token: string, userId: number, expiresAt: number): void {
-  getDb()
-    .prepare("INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)")
-    .run(token, userId, expiresAt);
+export async function createSession(token: string, userId: number, expiresAt: number): Promise<void> {
+  const db = await ready();
+  await db.execute({
+    sql: "INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)",
+    args: [token, userId, expiresAt],
+  });
 }
 
-export function getSessionWithUser(token: string): (Session & { user_name: string; user_role: string }) | undefined {
-  return getDb()
-    .prepare(
-      `SELECT sessions.*, users.name as user_name, users.role as user_role
-       FROM sessions JOIN users ON sessions.user_id = users.id
-       WHERE sessions.token = ? AND sessions.expires_at > unixepoch()`
-    )
-    .get(token) as (Session & { user_name: string; user_role: string }) | undefined;
+export async function getSessionWithUser(
+  token: string
+): Promise<(Session & { user_name: string; user_role: string }) | undefined> {
+  const db = await ready();
+  const res = await db.execute({
+    sql: `SELECT sessions.*, users.name as user_name, users.role as user_role
+          FROM sessions JOIN users ON sessions.user_id = users.id
+          WHERE sessions.token = ? AND sessions.expires_at > unixepoch()`,
+    args: [token],
+  });
+  return res.rows[0] as unknown as (Session & { user_name: string; user_role: string }) | undefined;
 }
 
-export function deleteSession(token: string): void {
-  getDb().prepare("DELETE FROM sessions WHERE token = ?").run(token);
+export async function deleteSession(token: string): Promise<void> {
+  const db = await ready();
+  await db.execute({ sql: "DELETE FROM sessions WHERE token = ?", args: [token] });
 }
 
-export function getUserSongsByName(name: string): UserSong[] {
-  return getDb()
-    .prepare("SELECT * FROM user_songs WHERE added_by = ? COLLATE NOCASE ORDER BY created_at DESC")
-    .all(name) as UserSong[];
+export async function getUserSongsByName(name: string): Promise<UserSong[]> {
+  const db = await ready();
+  const res = await db.execute({
+    sql: "SELECT * FROM user_songs WHERE added_by = ? COLLATE NOCASE ORDER BY created_at DESC",
+    args: [name],
+  });
+  return res.rows as unknown as UserSong[];
 }
 
-export function updateUserPassword(id: number, passwordHash: string): boolean {
-  const result = getDb()
-    .prepare("UPDATE users SET password_hash = ? WHERE id = ?")
-    .run(passwordHash, id);
-  return result.changes > 0;
+export async function updateUserPassword(id: number, passwordHash: string): Promise<boolean> {
+  const db = await ready();
+  const res = await db.execute({
+    sql: "UPDATE users SET password_hash = ? WHERE id = ?",
+    args: [passwordHash, id],
+  });
+  return res.rowsAffected > 0;
 }
 
-export function getUserAvatar(id: number): string | null {
-  const row = getDb()
-    .prepare("SELECT avatar FROM users WHERE id = ?")
-    .get(id) as { avatar: string | null } | undefined;
+export async function getUserAvatar(id: number): Promise<string | null> {
+  const db = await ready();
+  const res = await db.execute({
+    sql: "SELECT avatar FROM users WHERE id = ?",
+    args: [id],
+  });
+  const row = res.rows[0] as unknown as { avatar: string | null } | undefined;
   return row?.avatar ?? null;
 }
 
-export function updateUserAvatar(id: number, avatar: string): boolean {
-  const result = getDb()
-    .prepare("UPDATE users SET avatar = ? WHERE id = ?")
-    .run(avatar, id);
-  return result.changes > 0;
+export async function updateUserAvatar(id: number, avatar: string): Promise<boolean> {
+  const db = await ready();
+  const res = await db.execute({
+    sql: "UPDATE users SET avatar = ? WHERE id = ?",
+    args: [avatar, id],
+  });
+  return res.rowsAffected > 0;
 }
