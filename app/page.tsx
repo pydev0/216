@@ -51,12 +51,10 @@ function AvatarDropdown({
   user,
   onLogout,
   onAvatarUpdate,
-  onSongAdded,
 }: {
   user: AuthUser;
   onLogout: () => void;
   onAvatarUpdate: (avatar: string) => void;
-  onSongAdded: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
@@ -253,9 +251,6 @@ function AvatarDropdown({
             <div className="text-sm text-muted-foreground">
               {user.song_count} song{user.song_count !== 1 ? "s" : ""} added
             </div>
-
-            {/* Add a song */}
-            <AddSongForm onSongAdded={onSongAdded} />
           </div>
 
           <div className="h-px bg-white/10 mx-4" />
@@ -344,6 +339,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [nowPlaying, setNowPlaying] = useState<NowPlaying | null>(null);
+  const [view, setView] = useState<"charts" | "yourline">("charts");
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -377,6 +373,17 @@ export default function Home() {
       // Non-critical — user songs just won't show
     }
   }, []);
+
+  const handleDeleteSong = useCallback(async (id: number) => {
+    const prev = userSongs;
+    setUserSongs((songs) => songs.filter((s) => s.id !== id));
+    try {
+      const res = await fetch(`/api/songs/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete song");
+    } catch {
+      setUserSongs(prev);
+    }
+  }, [userSongs]);
 
   useEffect(() => {
     async function load() {
@@ -443,95 +450,145 @@ export default function Home() {
             user={user}
             onLogout={handleLogout}
             onAvatarUpdate={handleAvatarUpdate}
-            onSongAdded={fetchSongs}
           />
         )}
       </header>
 
         {/* Main content */}
         <main className="max-w-6xl mx-auto px-6 py-6 space-y-8">
-          {/* Filters */}
-          <div className="flex flex-col items-center gap-4">
-            <PeriodFilter selected={period} onSelect={setPeriod} />
-            {countries.length > 0 && (
-              <CountryTabs
-                countries={countries}
-                selected={selectedCountry}
-                onSelect={setSelectedCountry}
-              />
-            )}
+          {/* View switcher */}
+          <div className="flex justify-center">
+            <div className="inline-flex items-center gap-1.5 rounded-xl bg-white/5 border border-white/10 p-1.5 backdrop-blur-sm">
+              {(
+                [
+                  { value: "charts", label: "Charts" },
+                  { value: "yourline", label: "Your Line" },
+                ] as const
+              ).map((tab) => {
+                const isActive = view === tab.value;
+                return (
+                  <button
+                    key={tab.value}
+                    onClick={() => setView(tab.value)}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${
+                      isActive
+                        ? "bg-gradient-to-r from-purple-500/30 to-blue-500/30 border border-purple-400/20 text-purple-300 shadow-[0_0_12px_rgba(139,92,246,0.15)]"
+                        : "border border-transparent text-muted-foreground hover:text-foreground/80 hover:bg-white/5"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          {loading && (
-            <div className="flex flex-col items-center justify-center py-16 gap-3">
-              <svg
-                className="h-8 w-8 animate-spin text-purple-400"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-              </svg>
-              <p className="text-sm text-muted-foreground">Loading charts...</p>
-            </div>
-          )}
-
-          {error && (
-            <div className="text-center py-12 text-red-500">{error}</div>
-          )}
-
-          {/* Chart tracks */}
-          {!loading && filteredCharts.length > 0 && (
-            <section>
-              <h2 className="text-lg font-semibold mb-4 text-muted-foreground uppercase tracking-wider">
-                Top Charts
-                {selectedCountry !== "All" && ` — ${selectedCountry}`}
-              </h2>
-              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                {filteredCharts.map((track) => (
-                  <TrackCard
-                    key={`chart-${track.id}`}
-                    trackName={track.track_name}
-                    artist={track.artist}
-                    albumArt={track.album_art}
-                    youtubeId={track.youtube_id}
-                    country={track.country}
-                    onPlay={handlePlay}
+          {view === "charts" && (
+            <>
+              {/* Filters */}
+              <div className="flex flex-col items-center gap-4">
+                <PeriodFilter selected={period} onSelect={setPeriod} />
+                {countries.length > 0 && (
+                  <CountryTabs
+                    countries={countries}
+                    selected={selectedCountry}
+                    onSelect={setSelectedCountry}
                   />
-                ))}
+                )}
               </div>
+
+              {loading && (
+                <div className="flex flex-col items-center justify-center py-16 gap-3">
+                  <svg
+                    className="h-8 w-8 animate-spin text-purple-400"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  <p className="text-sm text-muted-foreground">Loading charts...</p>
+                </div>
+              )}
+
+              {error && (
+                <div className="text-center py-12 text-red-500">{error}</div>
+              )}
+
+              {/* Chart tracks */}
+              {!loading && filteredCharts.length > 0 && (
+                <section>
+                  <h2 className="text-lg font-semibold mb-4 text-muted-foreground uppercase tracking-wider">
+                    Top Charts
+                    {selectedCountry !== "All" && ` — ${selectedCountry}`}
+                  </h2>
+                  <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                    {filteredCharts.map((track) => (
+                      <TrackCard
+                        key={`chart-${track.id}`}
+                        trackName={track.track_name}
+                        artist={track.artist}
+                        albumArt={track.album_art}
+                        youtubeId={track.youtube_id}
+                        country={track.country}
+                        onPlay={handlePlay}
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
+            </>
+          )}
+
+          {view === "yourline" && (
+            <section>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-muted-foreground uppercase tracking-wider">Added by Your Line</h2>
+                <AddSongForm onSongAdded={fetchSongs} />
+              </div>
+
+              {countries.length > 0 && (
+                <div className="mb-5 flex justify-center">
+                  <CountryTabs
+                    countries={countries}
+                    selected={selectedCountry}
+                    onSelect={setSelectedCountry}
+                  />
+                </div>
+              )}
+
+              {filteredSongs.length > 0 ? (
+                <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                  {filteredSongs.map((song) => (
+                    <TrackCard
+                      key={`song-${song.id}`}
+                      trackName={song.title || "Untitled"}
+                      artist={song.artist || ""}
+                      albumArt={song.album_art}
+                      youtubeId={song.youtube_id}
+                      country={song.country_tag}
+                      addedBy={song.added_by}
+                      addedAt={song.created_at}
+                      onPlay={handlePlay}
+                      canDelete={
+                        !!user &&
+                        (user.role === "admin" ||
+                          song.added_by?.toLowerCase() === user.name.toLowerCase())
+                      }
+                      onDelete={() => handleDeleteSong(song.id)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                !loading && (
+                  <p className="text-muted-foreground text-sm">
+                    No songs added yet. Be the first to share a track!
+                  </p>
+                )
+              )}
             </section>
           )}
-
-          {/* User-added songs */}
-          <section>
-            <h2 className="text-lg font-semibold mb-4 text-muted-foreground uppercase tracking-wider">Added by Your Line</h2>
-
-            {filteredSongs.length > 0 ? (
-              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                {filteredSongs.map((song) => (
-                  <TrackCard
-                    key={`song-${song.id}`}
-                    trackName={song.title || "Untitled"}
-                    artist={song.artist || ""}
-                    albumArt={song.album_art}
-                    youtubeId={song.youtube_id}
-                    country={song.country_tag}
-                    addedBy={song.added_by}
-                    addedAt={song.created_at}
-                    onPlay={handlePlay}
-                  />
-                ))}
-              </div>
-            ) : (
-              !loading && (
-                <p className="text-muted-foreground text-sm">
-                  No songs added yet. Be the first to share a track!
-                </p>
-              )
-            )}
-          </section>
         </main>
 
       {/* Video player modal */}
